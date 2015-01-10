@@ -11,6 +11,9 @@ Features:
 */
 var userid = require('userid');
 var prompt = require('prompt');
+var promise = require('bluebird');
+//var fs = promise.promisifyAll(require("fs"));
+var fs = require('fs');
 var CONFIG_FILE = './config.json';
 
 function clearConsole()
@@ -39,13 +42,13 @@ function runningAsRoot()
 function attemptRunAsBackupUser()
 {
     var backupUid = userid.uid('backup');
-    if(backupUid !== null)
+    if (backupUid !== null)
     {
         try
         {
             process.setuid(backupUid);
         }
-        catch(err)
+        catch (err)
         {
             return false;
         }
@@ -59,10 +62,10 @@ function attemptRunAsBackupUser()
 
 function tryDropPrivilegesIfRoot()
 {
-    if(runningAsRoot())
+    if (runningAsRoot())
     {
         console.log('Root privileges detected.\nTrying to drop to backup user privileges...');
-        if(attemptRunAsBackupUser())
+        if (attemptRunAsBackupUser())
         {
             console.log('Dropped succesfully');
         }
@@ -75,33 +78,115 @@ function tryDropPrivilegesIfRoot()
 
 function configFileExists()
 {
-
+    return fs.existsSync(CONFIG_FILE);
 }
 
 function generateConfigIfNotExists()
 {
-    if(configFileExists())
+    return new promise(function(resolve, reject)
     {
-        console.log('Config file found');
-    }
-    else
-    {
-        console.log('Config file not found - generating new configuration');
-        generateNewConfig();
-    }
+        if (configFileExists())
+        {
+            console.log('Config file found');
+            resolve();
+        }
+        else
+        {
+            console.log('Config file not found - generating new configuration...');
+            generateNewConfig().
+            then(function()
+            {
+                resolve();
+            });
+        }
+    });
 }
 
+function generateNewConfig()
+{
+    return promptForConfig().
+    then(function(result)
+    {
+        fs.writeFileSync(CONFIG_FILE, result);
+    }).
+    catch(function(err)
+    {
+        console.log('Config generation error');
+    });
+}
 
+function promptForConfig()
+{
+    return new promise(function(resolve, reject)
+    {
+        var schema = {
+            properties:
+            {
+                backupSource:
+                {
+                    description: 'Enter the backup source location',
+                    required: true
+                },
+                backupDestination:
+                {
+                    description: 'Enter the backup destination drive',
+                    required: true
+                },
+                backupDate:
+                {
+                    description: 'Enter the max. date of the files that will be backed up (leave blank to include all files)',
+                    pattern: /^(?:(?:31(\/|-|\.)(?:0?[13578]|1[02]))\1|(?:(?:29|30)(\/|-|\.)(?:0?[1,3-9]|1[0-2])\2))(?:(?:1[6-9]|[2-9]\d)?\d{2})$|^(?:29(\/|-|\.)0?2\3(?:(?:(?:1[6-9]|[2-9]\d)?(?:0[48]|[2468][048]|[13579][26])|(?:(?:16|[2468][048]|[3579][26])00))))$|^(?:0?[1-9]|1\d|2[0-8])(\/|-|\.)(?:(?:0?[1-9])|(?:1[0-2]))\4(?:(?:1[6-9]|[2-9]\d)?\d{2})$/,
+                    message: 'Please enter a valid date in DD/MM/YYYY format',
+                    required: false
+                },
+                logMailReceiver:
+                {
+                    description: 'Enter your email address to receive a log summary (leave blank to disable)',
+                    required: false
+                },
+                logMailSender:
+                {
+                    description: 'Enter an email address to send the logs from (Gmail only, leave blank for system default)',
+                    required: false
+                },
+                logMailSenderPassword:
+                {
+                    description: 'Enter the password for the email address (Gmail, leave blank if none)',
+                    required: false
+                }
+            }
+        };
+        prompt.message = '';
+        prompt.delimiter = '';
+        prompt.start();
+        prompt.get(schema, function(err, result)
+        {
+            if (err)
+            {
+                reject(err);
+            }
+            else
+            {
+                resolve(result);
+            }
+        });
+    });
+}
 
+function loadConfig()
+{
+    //todo
+}
 // MAIN SCRIPT
 (function()
 {
     showWelcome();
     tryDropPrivilegesIfRoot();
-
-    generateConfigIfNotExists();
-    loadConfig();
-    // todo
-
-    showGoodbye();
+    generateConfigIfNotExists().
+    then(function()
+    {
+        loadConfig();
+        showGoodbye();
+        //todo
+    });
 }());
