@@ -10,6 +10,7 @@ Features:
     - Proper error reporting – disk full, permissions problem, wrong disk, …
     - Test mode that shows what exactly will be done and why – rather than performing the actual backup
     - Sends backup summary to you (configurable email address)
+    - Exclude config option to exclude individual files or patterns
 
 Usage:
     npm install
@@ -19,6 +20,7 @@ Arguments:
     --backupSource: Source folder to backup
     --backupDestination: Where to save the backup. A disk root is assumed
     --backupDate: Files modified before this date will be ignored
+    --exclude: Exclude files by name. Has limited regex support with global flag set by default
     --testMode: Don't copy anything, just print a preview (Y/N)
     --sendMailSummary: Send a summary of the backup by mail (Y/N)
     --logMailReceiver: Address to receive the backup summary
@@ -278,6 +280,23 @@ function promptForConfig()
                     else return (isNaN(Date.parse(input)) === false);
                 },
                 required: false
+            },
+            exclude:
+            {
+                description: 'Enter a regex used to exclude files (leave blank to include all):',
+                conform: function(input)
+                {
+                    try
+                    {
+                        var regex = new RegExp(input);
+                        if (regex !== undefined) return true;
+                    }
+                    catch (err)
+                    {
+                        return false;
+                    }
+                },
+                required: true
             },
             testMode:
             {
@@ -564,22 +583,21 @@ function buildPendingBackupList(source, destination)
     var sourceFileTree = getFileTree(source, config.backupSource);
     // flat tree is easier to manage, but we include the full tree in case we want to visualize later
     var sourceFileList = flattenFileTree(sourceFileTree);
-    //logger.info(sourceFileList);
-    //logger.info('Files found in source folder: ' + sourceFileList.length);
     var destinationFileTree = getFileTree(destination, config.backupDestination);
     var destinationFileList = flattenFileTree(destinationFileTree);
-    //logger.info(destinationFileList);
-    //logger.info('Files found in destination folder: ' + destinationFileList.length);
     var pendingFilesList = getPendingFilesFromLists(sourceFileList, destinationFileList);
-    //logger.info('New files found: ' + pendingFilesList.length);
-    //logger.info(pendingFilesList);
-    var filteredPendingFilesList = filterListByMinDate(pendingFilesList, config.backupDate);
+    logger.info('New files found: ' + pendingFilesList.length);
     if (pendingFilesList.length > 0)
     {
-        logger.info('Filtered files by date: ' + (pendingFilesList.length - filteredPendingFilesList.length));
-        //logger.info(pendingFilesList);
+        pendingFilesList = filterListByMinDate(pendingFilesList, config.backupDate);
+        logger.info('Files remaining after date filter: ' + pendingFilesList.length);
     }
-    return filteredPendingFilesList;
+    if (pendingFilesList.length > 0)
+    {
+        pendingFilesList = filterByRegex(pendingFilesList, config.exclude);
+        logger.info('Files remaining after regex filter: ' + pendingFilesList.length);
+    }
+    return pendingFilesList;
 }
 
 function getFileTree(filename, root)
@@ -651,6 +669,21 @@ function filterListByMinDate(fileList, minDate)
         var file = fileList[fileNr];
         var fileModDate = Date.parse(file.lastModified);
         if (fileModDate >= minDateParsed)
+        {
+            filteredList.push(file);
+        }
+    }
+    return filteredList;
+}
+
+function filterByRegex(fileList, regex)
+{
+    var filter = new RegExp(regex, 'g');
+    var filteredList = [];
+    for (var fileNr in fileList)
+    {
+        var file = fileList[fileNr];
+        if (file.name.match(filter) === null)
         {
             filteredList.push(file);
         }
@@ -781,7 +814,7 @@ function mailLogSummary()
 function generateLogSummary()
 {
     var summaryString = 'backup.js Log Summary - ' + new Date().toDateString();
-    summaryString += '\n'+Array(68).join("=")+'\n'; // print 68 x '='
+    summaryString += '\n' + Array(68).join("=") + '\n'; // print 68 x '='
     for (var line = 0; line < logMessages.length; line++)
     {
         summaryString += logMessages[line] + '\n';
@@ -846,6 +879,6 @@ function getGmailTransporter(user, pass)
     catch (function(err)
     {
         logger.error('An unexpected error occurred');
-        logger.error(err);
+        logger.error(err.toString());
     });
 }());
