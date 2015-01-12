@@ -1,11 +1,6 @@
 {
-  "backupSource": "/",
-  "backupDestination": "/",
+  "backupSource": "testFiles",
+  "backupDestination": "testDisk",
   "backupDate": "",
-  "sendMailSummary": true,
-  "mailConfig": {
-    "logMailReceiver": "lol",
-    "logMailSender": "hi",
-    "logMailSenderPassword": "lol"
-  }
+  "sendMailSummary": false
 }

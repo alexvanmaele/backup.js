@@ -13,7 +13,10 @@ var userid = require('userid');
 var promise = require('bluebird');
 var fs = promise.promisifyAll(require("fs"));
 var prompt = promise.promisifyAll(require('prompt'));
+var extfs = require('extfs');
+// config
 var CONFIG_FILE = './config.json';
+var config;
 
 function clearConsole()
 {
@@ -129,21 +132,38 @@ function generateNewConfig()
 
 function promptForConfig()
 {
-    prompt.message = '';
-    prompt.delimiter = '';
-    prompt.colors = false;
+    var validLocationCheck = function(input)
+    {
+        if (checkValidLocation(input) === false)
+        {
+            console.log('Invalid location');
+            return false;
+        }
+        else
+        {
+            return true;
+        }
+    };
     var backupConfigScheme = {
         properties:
         {
             backupSource:
             {
                 description: 'Enter the backup source location:',
-                required: true
+                required: true,
+                conform: function(input)
+                {
+                    return validLocationCheck(input);
+                }
             },
             backupDestination:
             {
                 description: 'Enter the backup destination drive:',
-                required: true
+                required: true,
+                conform: function(input)
+                {
+                    return validLocationCheck(input);
+                }
             },
             backupDate:
             {
@@ -212,7 +232,7 @@ function promptForConfig()
         }
     }).then(function(mailSenderConfig)
     {
-        if(mailSenderConfig !== undefined)
+        if (mailSenderConfig !== undefined)
         {
             config.mailConfig.logMailSenderPassword = mailSenderConfig.logMailSenderPassword;
         }
@@ -220,11 +240,15 @@ function promptForConfig()
     });
 }
 
-function promptFor(schema)
+function promptFor(scheme)
 {
+    prompt.message = '';
+    prompt.delimiter = '';
+    prompt.colors = false;
+    prompt.start();
     return new promise(function(resolve, reject)
     {
-        prompt.get(schema, function(err, result)
+        prompt.get(scheme, function(err, result)
         {
             if (err)
             {
@@ -238,9 +262,144 @@ function promptFor(schema)
     });
 }
 
+function checkValidLocation(dir)
+{
+    try
+    {
+        return fs.existsSync(dir);
+    }
+    catch (err)
+    {
+        console.log(err);
+        return false;
+    }
+}
+
 function loadConfig()
 {
-    //todo
+    try
+    {
+        config = JSON.parse(fs.readFileSync(CONFIG_FILE));
+    }
+    catch (err)
+    {
+        console.log('Error reading config file');
+        throw (err);
+    }
+}
+
+function initDisk(disk)
+{
+    return new promise(function(resolve, reject)
+    {
+        if (diskIsValid(disk) === false)
+        {
+            console.log('New disk detected');
+            eraseIfNotEmpty(disk).
+            then(function()
+            {
+                resolve();
+            });
+        }
+        else
+        {
+            resolve();
+        }
+    });
+}
+
+function eraseIfNotEmpty(disk)
+{
+    return new promise(function(resolve, reject)
+    {
+        if (extfs.isEmptySync(disk) === false)
+        {
+            console.log('WARNING: Disk is not empty! Do you want to erase the disk?');
+            promptForConfirm().
+            then(function(result)
+            {
+                if (result.confirmed === true)
+                {
+                    eraseDisk(disk);
+                }
+                else
+                {
+                    console.log('Disk has not been erased');
+                }
+                resolve();
+            });
+        }
+        else
+        {
+            resolve();
+        }
+    });
+}
+
+function promptForConfirm()
+{
+    var confirmScheme = {
+        properties:
+        {
+            confirmed:
+            {
+                description: 'Type \'yes\' to confirm:',
+                required: false,
+                before: function(input)
+                {
+                    if (input.toLowerCase() === 'yes')
+                    {
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+    };
+    return promptFor(confirmScheme);
+}
+
+function eraseDisk(diskRoot)
+{
+    try
+    {
+        cleanDir(diskRoot);
+        console.log('Disk has been erased');
+    }
+    catch (err)
+    {
+        console.log('Error erasing disk');
+        if (err.code === 'EACCES')
+        {
+            console.log('Error: insufficient permissions to erase disk');
+        }
+        else
+        {
+            console.log(err);
+        }
+    }
+}
+
+function cleanDir(dirPath)
+{
+    var files = fs.readdirSync(dirPath);
+    if (files.length > 0)
+        for (var i = 0; i < files.length; i++)
+        {
+            var filePath = dirPath + '/' + files[i];
+            if (fs.statSync(filePath).isFile()) fs.unlinkSync(filePath);
+            else cleanDir(filePath);
+        }
+    //fs.rmdirSync(dirPath);
+}
+
+function diskIsValid(disk)
+{
+    var DISK_SIGNATURE_FILE = 'backupjs.signature';
+    return fs.existsSync(disk + DISK_SIGNATURE_FILE);
 }
 // MAIN SCRIPT
 (function()
@@ -251,7 +410,16 @@ function loadConfig()
     then(function()
     {
         loadConfig();
-        showGoodbye();
+        return initDisk(config.backupDestination);
         //todo
+    }).
+    then(function()
+    {
+        showGoodbye();
+    }).
+    catch (function(err)
+    {
+        console.log('An unexpected error occurred');
+        console.log(err);
     });
 }());
