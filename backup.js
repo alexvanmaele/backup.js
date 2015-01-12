@@ -18,6 +18,10 @@ var path = require('path');
 // config
 var CONFIG_FILE = './config.json';
 var DISK_SIGNATURE_FILE = 'backupjs.signature';
+var backupReasons = {
+    DEST_FILE_NOT_FOUND: 'Destination file not found',
+    SRC_FILE_NEWER: 'Source file is newer than destination file'
+};
 var config;
 
 function clearConsole()
@@ -445,14 +449,16 @@ function buildPendingBackupList(source, destination)
     var sourceFileTree = getFileTree(source, config.backupSource);
     // flat tree is easier to manage, but we include the full tree in case we want to visualize later
     var sourceFileList = flattenFileTree(sourceFileTree);
-    console.log(sourceFileList);
-    console.log('Files found in source folder: ' + sourceFileList.length);
+    //console.log(sourceFileList);
+    //console.log('Files found in source folder: ' + sourceFileList.length);
     var destinationFileTree = getFileTree(destination, config.backupDestination);
     var destinationFileList = flattenFileTree(destinationFileTree);
-    console.log(destinationFileList);
-    console.log('Files found in destination folder: ' + destinationFileList.length);
+    //console.log(destinationFileList);
+    //console.log('Files found in destination folder: ' + destinationFileList.length);
     var pendingFilesList = getPendingFilesFromLists(sourceFileList, destinationFileList);
     console.log('New files found: ' + pendingFilesList.length);
+    //console.log(pendingFilesList);
+    return pendingFilesList;
 }
 
 function getFileTree(filename, root)
@@ -460,7 +466,7 @@ function getFileTree(filename, root)
     var stats = fs.lstatSync(filename);
     var info = {
         path: filename,
-        relativePath: filename.substring(root.length+1, filename.length),
+        relativePath: filename.substring(root.length + 1, filename.length),
         name: path.basename(filename),
         lastModified: stats.mtime
     };
@@ -520,12 +526,14 @@ function getPendingFilesFromLists(sourceList, destinationList)
         var destinationClone = findFileInList(sourceFile, destinationList);
         if (destinationClone === undefined)
         {
+            sourceFile.reason = backupReasons.DEST_FILE_NOT_FOUND;
             pendingFilesList.push(sourceFile);
         }
         else
         {
             if (compareFilesByDate(sourceFile, destinationClone) === 1) //source is newer
             {
+                sourceFile.reason = backupReasons.SRC_FILE_NEWER;
                 pendingFilesList.push(sourceFile);
             }
         }
@@ -553,6 +561,13 @@ function compareFilesByDate(fileA, fileB)
     if (dateA === dateB) return 0;
     if (dateA < dateB) return -1;
 }
+
+function printTestModeBackupList(backupList)
+{
+    console.log('Following files are different on source:\n');
+    console.log(backupList);
+    console.log('\nRunning in test mode.\nThis is only a preview: files will not be backed up!');
+}
 // MAIN SCRIPT
 (function()
 {
@@ -569,8 +584,7 @@ function compareFilesByDate(fileA, fileB)
         var pendingBackupList = buildPendingBackupList(config.backupSource, config.backupDestination);
         if (config.testMode === true)
         {
-            //printBackupListStats(pendingBackupList);
-            //todo: possible return promise here
+            printTestModeBackupList(pendingBackupList);
         }
         else
         {
