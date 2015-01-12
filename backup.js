@@ -27,6 +27,7 @@ Arguments:
     --logMailSender: Address used to send the backup summary (only Gmail is supported right now)
     --logMailSenderPassword: Password for the sending address
     --force-erase: Don't ask before erasing a non-empty backup destination
+    --reset-config: Remove the existing config in order to generate a new one
 
 Example:
     node backup.js --backupSource=testFiles --backupDestination=testDisk --backupDate= --testMode=Y --sendMailSummary=N --force-erase
@@ -196,7 +197,24 @@ function generateConfigIfNotExists()
         if (configFileExists())
         {
             logger.info('Config file found');
-            resolve();
+            if (argv['reset-config'] === true)
+            {
+                logger.info('Warning: existing config will be reset!');
+                generateNewConfig().
+                then(function()
+                {
+                    resolve();
+                }).
+                catch (function(err)
+                {
+                    logger.info('Config generation error');
+                    logger.info(err);
+                });
+            }
+            else
+            {
+                resolve();
+            }
         }
         else
         {
@@ -296,7 +314,7 @@ function promptForConfig()
                         return false;
                     }
                 },
-                required: true
+                required: false
             },
             testMode:
             {
