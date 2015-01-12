@@ -323,10 +323,10 @@ function promptForConfig()
                 pattern: /[YN]/i,
                 message: 'Please enter \'Y\' or \'N\'',
                 required: true,
-                before: function(input)
+                /*before: function(input)
                 {
-                    return input.toUpperCase() == 'Y';
-                }
+                    return input.toUpperCase() === 'Y';
+                }*/
             },
             sendMailSummary:
             {
@@ -335,10 +335,10 @@ function promptForConfig()
                 pattern: /[YN]/i,
                 message: 'Please enter \'Y\' or \'N\'',
                 required: true,
-                before: function(input)
+                /*before: function(input)
                 {
-                    return input.toUpperCase() == 'Y';
-                }
+                    return input.toUpperCase() === 'Y';
+                }*/
             }
         }
     };
@@ -373,7 +373,7 @@ function promptForConfig()
     then(function(result)
     {
         var mailConfig;
-        if (result.sendMailSummary === true)
+        if (result.sendMailSummary.toUpperCase() === 'Y')
         {
             mailConfig = promptFor(mailConfigScheme);
         }
@@ -872,7 +872,7 @@ function getGmailTransporter(user, pass)
     then(function()
     {
         var pendingBackupList = buildPendingBackupList(config.backupSource, config.backupDestination);
-        if (config.testMode === true)
+        if (config.testMode.toUpperCase() === 'Y')
         {
             printTestModeBackupList(pendingBackupList);
         }
@@ -883,7 +883,7 @@ function getGmailTransporter(user, pass)
     }).
     then(function()
     {
-        if (config.sendMailSummary === true)
+        if (config.sendMailSummary.toUpperCase() === 'Y')
         {
             return mailLogSummary();
         }
