@@ -41,7 +41,7 @@ function runningAsRoot()
 function attemptRunAsBackupUser()
 {
     var backupUid = userid.uid('backup');
-    if (backupUid !== null)
+    if (backupUid !== undefined)
     {
         try
         {
@@ -111,7 +111,7 @@ function generateNewConfig()
     return promptForConfig().
     then(function(result)
     {
-        var prettyJson = JSON.stringify(result, null, 2);
+        var prettyJson = JSON.stringify(result, undefined, 2);
         fs.writeFileSync(CONFIG_FILE, prettyJson);
     }).
     catch (function(err)
@@ -132,8 +132,7 @@ function promptForConfig()
     prompt.message = '';
     prompt.delimiter = '';
     prompt.colors = false;
-    //prompt.start();
-    var backupConfig = {
+    var backupConfigScheme = {
         properties:
         {
             backupSource:
@@ -162,36 +161,62 @@ function promptForConfig()
                 required: true,
                 before: function(input)
                 {
-                    return  input.toLowerCase();
+                    return input.toUpperCase() == 'Y';
                 }
             }
-
         }
     };
-    var emailConfig = {
-        logMailReceiver:
+    var mailConfigScheme = {
+        properties:
+        {
+            logMailReceiver:
             {
                 description: 'Enter a mail address to receive a log summary:',
                 required: true
             },
-        logMailSender:
+            logMailSender:
             {
                 description: 'Enter a mail address used to send logs (Gmail only, leave blank for system default):',
                 required: false
             },
+        }
+    };
+    var mailSenderConfigScheme = {
+        properties:
+        {
             logMailSenderPassword:
             {
-                description: 'Enter the password for this mail address (Gmail, leave blank if none):',
-                required: false
+                description: 'Enter the password for this mail address (Gmail only):',
+                required: false,
+                hidden: true
             }
+        }
     };
-    return promptFor(backupConfig).
+    var config;
+    return promptFor(backupConfigScheme).
     then(function(result)
     {
-        if(result.sendMailSummary === true)
+        var mailConfig;
+        if (result.sendMailSummary === true)
         {
-            promptFor(emailConfig);
+            mailConfig = promptFor(mailConfigScheme);
         }
+        return [result, mailConfig];
+    }).spread(function(result, mailConfig)
+    {
+        config = result;
+        config.mailConfig = mailConfig;
+        if (mailConfig !== undefined && mailConfig.logMailSender.length > 0)
+        {
+            return promptFor(mailSenderConfigScheme);
+        }
+    }).then(function(mailSenderConfig)
+    {
+        if(mailSenderConfig !== undefined)
+        {
+            config.mailConfig.logMailSenderPassword = mailSenderConfig.logMailSenderPassword;
+        }
+        return config;
     });
 }
 
