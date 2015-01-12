@@ -2,6 +2,6 @@
   "backupSource": "testFiles",
   "backupDestination": "testDisk",
   "backupDate": "",
-  "testMode": "Y",
-  "sendMailSummary": "N"
+  "testMode": false,
+  "sendMailSummary": false
 }

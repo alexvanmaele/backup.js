@@ -1,20 +1,25 @@
 /*
 Features:
-- Runs as a backup user, not as root
-- Configuration file generator/modifier feature, interactively or command line based
-- Config option to only backup files after a certain date
-- Detect and clean new disk on first use
-- Incremental backups
-- Proper error reporting – disk full, permissions problem, wrong disk, …
-- Test mode that shows what exactly will be done and why – rather than performing the actual backup
-- Sends backup summary to you (configurable email address)
+    - Runs as a backup user, not as root
+    - Configuration file generator/modifier feature, interactively or command line based
+    - Config option to only backup files after a certain date
+    - Detect and clean new disk on first use
+    - Incremental backups
+    - Proper error reporting – disk full, permissions problem, wrong disk, …
+    - Test mode that shows what exactly will be done and why – rather than performing the actual backup
+    - Sends backup summary to you (configurable email address)
+    - Command-line argument to force erase non-empty disk
+
+Arguments:
+    --
 */
 var userid = require('userid');
 var promise = require('bluebird');
-var fs = promise.promisifyAll(require("fs"));
+var fs = promise.promisifyAll(require("fs-extra"));
 var prompt = promise.promisifyAll(require('prompt'));
 var extfs = require('extfs');
 var path = require('path');
+var argv = require('minimist')(process.argv.slice(2));
 // config
 var CONFIG_FILE = './config.json';
 var DISK_SIGNATURE_FILE = 'backupjs.signature';
@@ -174,8 +179,11 @@ function promptForConfig()
             backupDate:
             {
                 description: 'Enter the max. file date (leave blank to include all):',
-                pattern: /^(?:(?:31(\/|-|\.)(?:0?[13578]|1[02]))\1|(?:(?:29|30)(\/|-|\.)(?:0?[1,3-9]|1[0-2])\2))(?:(?:1[6-9]|[2-9]\d)?\d{2})$|^(?:29(\/|-|\.)0?2\3(?:(?:(?:1[6-9]|[2-9]\d)?(?:0[48]|[2468][048]|[13579][26])|(?:(?:16|[2468][048]|[3579][26])00))))$|^(?:0?[1-9]|1\d|2[0-8])(\/|-|\.)(?:(?:0?[1-9])|(?:1[0-2]))\4(?:(?:1[6-9]|[2-9]\d)?\d{2})$/,
-                message: 'Please enter a valid date in DD/MM/YYYY format',
+                conform: function(input)
+                {
+                    if(input.length < 1) return true; //can be blank
+                    else return input.match(/^(?:(?:31(\/|-|\.)(?:0?[13578]|1[02]))\1|(?:(?:29|30)(\/|-|\.)(?:0?[1,3-9]|1[0-2])\2))(?:(?:1[6-9]|[2-9]\d)?\d{2})$|^(?:29(\/|-|\.)0?2\3(?:(?:(?:1[6-9]|[2-9]\d)?(?:0[48]|[2468][048]|[13579][26])|(?:(?:16|[2468][048]|[3579][26])00))))$|^(?:0?[1-9]|1\d|2[0-8])(\/|-|\.)(?:(?:0?[1-9])|(?:1[0-2]))\4(?:(?:1[6-9]|[2-9]\d)?\d{2})$/);
+                },
                 required: false
             },
             testMode:
@@ -263,6 +271,7 @@ function promptFor(scheme)
     prompt.message = '';
     prompt.delimiter = '';
     prompt.colors = false;
+    prompt.override = argv;
     prompt.start();
     return new promise(function(resolve, reject)
     {
@@ -313,12 +322,21 @@ function initDisk(disk)
         if (diskIsValid(disk) === false)
         {
             console.log('New disk detected');
-            eraseIfNotEmpty(disk).
-            then(function()
+            if (argv['force-erase'] === true)
             {
+                eraseDisk(disk);
                 markDisk(disk);
                 resolve();
-            });
+            }
+            else
+            {
+                eraseIfNotEmpty(disk).
+                then(function()
+                {
+                    markDisk(disk);
+                    resolve();
+                });
+            }
         }
         else
         {
@@ -347,6 +365,10 @@ function eraseIfNotEmpty(disk)
                     console.log('Disk has not been erased');
                 }
                 resolve();
+            }).
+            catch (function(err)
+            {
+                console.log(err);
             });
         }
         else
@@ -456,7 +478,7 @@ function buildPendingBackupList(source, destination)
     //console.log(destinationFileList);
     //console.log('Files found in destination folder: ' + destinationFileList.length);
     var pendingFilesList = getPendingFilesFromLists(sourceFileList, destinationFileList);
-    console.log('New files found: ' + pendingFilesList.length);
+    //console.log('New files found: ' + pendingFilesList.length);
     //console.log(pendingFilesList);
     return pendingFilesList;
 }
@@ -568,10 +590,37 @@ function printTestModeBackupList(backupList)
     console.log(backupList);
     console.log('\nRunning in test mode.\nThis is only a preview: files will not be backed up!');
 }
+
+function performBackup(fileList)
+{
+    if (fileList.length < 1)
+    {
+        console.log('No files to backup!');
+        return;
+    }
+    console.log('Performing backup...');
+    var overwriteCount = 0;
+    for (var fileNr in fileList)
+    {
+        var file = fileList[fileNr];
+        var stats = fs.statSync(file.path);
+        var backupPath = config.backupDestination + '/' + file.relativePath;
+        if (fs.existsSync(backupPath))
+        {
+            fs.unlinkSync(backupPath); //delete
+            overwriteCount++;
+        }
+        fs.copySync(file.path, backupPath);
+        fs.utimesSync(backupPath, stats.atime, stats.mtime); //sync timestamsp
+    }
+    console.log('Backup complete!');
+    console.log('Backed up %s %s (Updated: %s)', fileList.length, fileList.length === 1 ? 'file' : 'files', overwriteCount);
+}
 // MAIN SCRIPT
 (function()
 {
     showWelcome();
+    //console.log(argv);
     tryDropPrivilegesIfRoot();
     generateConfigIfNotExists().
     then(function()
@@ -588,8 +637,7 @@ function printTestModeBackupList(backupList)
         }
         else
         {
-            //performBackup(pendingBackupList);
-            //todo: possible return promise here
+            performBackup(pendingBackupList);
         }
     }).
     finally(function()
