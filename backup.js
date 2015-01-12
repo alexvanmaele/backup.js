@@ -1,4 +1,6 @@
 /*
+backup.js - A backup script in node.js
+
 Features:
     - Runs as a backup user, not as root
     - Configuration file generator/modifier feature, interactively or command line based
@@ -8,10 +10,25 @@ Features:
     - Proper error reporting – disk full, permissions problem, wrong disk, …
     - Test mode that shows what exactly will be done and why – rather than performing the actual backup
     - Sends backup summary to you (configurable email address)
-    - Command-line argument to force erase non-empty disk
+
+Usage:
+    npm install
+    node backup.js
 
 Arguments:
-    --
+    --backupSource: Source folder to backup
+    --backupDestination: Where to save the backup. A disk root is assumed
+    --backupDate: Files modified before this date will be ignored
+    --testMode: Don't copy anything, just print a preview (Y/N)
+    --sendMailSummary: Send a summary of the backup by mail (Y/N)
+    --logMailReceiver: Address to receive the backup summary
+    --logMailSender: Address used to send the backup summary (only Gmail is supported right now)
+    --logMailSenderPassword: Password for the sending address
+    --force-erase: Don't ask before erasing a non-empty backup destination
+
+Example:
+    node backup.js --backupSource=testFiles --backupDestination=testDisk --backupDate= --testMode=Y --sendMailSummary=N --force-erase
+
 */
 var userid = require('userid');
 var promise = require('bluebird');
@@ -182,7 +199,7 @@ function promptForConfig()
                 conform: function(input)
                 {
                     if(input.length < 1) return true; //can be blank
-                    else return input.match(/^(?:(?:31(\/|-|\.)(?:0?[13578]|1[02]))\1|(?:(?:29|30)(\/|-|\.)(?:0?[1,3-9]|1[0-2])\2))(?:(?:1[6-9]|[2-9]\d)?\d{2})$|^(?:29(\/|-|\.)0?2\3(?:(?:(?:1[6-9]|[2-9]\d)?(?:0[48]|[2468][048]|[13579][26])|(?:(?:16|[2468][048]|[3579][26])00))))$|^(?:0?[1-9]|1\d|2[0-8])(\/|-|\.)(?:(?:0?[1-9])|(?:1[0-2]))\4(?:(?:1[6-9]|[2-9]\d)?\d{2})$/);
+                    else return (isNaN(Date.parse(input)) === false);
                 },
                 required: false
             },
