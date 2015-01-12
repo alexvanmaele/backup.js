@@ -318,6 +318,7 @@ function initDisk(disk)
         }
         else
         {
+            console.log('Valid disk detected');
             resolve();
         }
     });
@@ -389,11 +390,11 @@ function eraseDisk(diskRoot)
         console.log('Error erasing disk');
         if (err.code === 'EACCES')
         {
-            throw('Error: insufficient permissions to erase disk');
+            throw ('Error: insufficient permissions to erase disk');
         }
         else
         {
-            throw(err);
+            throw (err);
         }
     }
 }
@@ -414,34 +415,52 @@ function cleanDir(dirPath)
 
 function markDisk(diskRoot)
 {
-    var mark = 'backup.js - disk cleared on ' + Date();
-    mark += '\nDo not remove this file, it is used by backup.js to verify the disk';
-    fs.writeFileSync(diskRoot + '/' + DISK_SIGNATURE_FILE, mark);
+    try
+    {
+        var mark = 'backup.js - disk cleared on ' + Date();
+        mark += '\nDo not remove this file, it is used by backup.js to verify the disk';
+        fs.writeFileSync(diskRoot + '/' + DISK_SIGNATURE_FILE, mark);
+    }
+    catch (err)
+    {
+        console.log('Error marking disk');
+        if (err.code === 'EACCES')
+        {
+            throw ('Error: insufficient permissions to mark disk');
+        }
+        else
+        {
+            throw (err);
+        }
+    }
 }
 
 function diskIsValid(disk)
 {
-    return fs.existsSync(disk + DISK_SIGNATURE_FILE);
+    return fs.existsSync(disk + '/' + DISK_SIGNATURE_FILE);
 }
 
 function buildPendingBackupList(source, destination)
 {
-    var sourceFileTree = getFileTree(source);
+    var sourceFileTree = getFileTree(source, config.backupSource);
     // flat tree is easier to manage, but we include the full tree in case we want to visualize later
     var sourceFileList = flattenFileTree(sourceFileTree);
+    console.log(sourceFileList);
     console.log('Files found in source folder: ' + sourceFileList.length);
-    var destinationFileTree = getFileTree(destination);
+    var destinationFileTree = getFileTree(destination, config.backupDestination);
     var destinationFileList = flattenFileTree(destinationFileTree);
+    console.log(destinationFileList);
     console.log('Files found in destination folder: ' + destinationFileList.length);
     var pendingFilesList = getPendingFilesFromLists(sourceFileList, destinationFileList);
     console.log('New files found: ' + pendingFilesList.length);
 }
 
-function getFileTree(filename)
+function getFileTree(filename, root)
 {
     var stats = fs.lstatSync(filename);
     var info = {
         path: filename,
+        relativePath: filename.substring(root.length+1, filename.length),
         name: path.basename(filename),
         lastModified: stats.mtime
     };
@@ -450,7 +469,7 @@ function getFileTree(filename)
         info.type = "folder";
         info.children = fs.readdirSync(filename).map(function(child)
         {
-            return getFileTree(filename + '/' + child);
+            return getFileTree(filename + '/' + child, root);
         });
     }
     else
@@ -519,7 +538,7 @@ function findFileInList(file, fileList)
     for (var fileNr in fileList)
     {
         var listFile = fileList[fileNr];
-        if (listFile.path === file.path)
+        if (listFile.relativePath === file.relativePath)
         {
             return listFile;
         }
