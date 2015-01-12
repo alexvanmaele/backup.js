@@ -17,6 +17,7 @@ var extfs = require('extfs');
 var path = require('path');
 // config
 var CONFIG_FILE = './config.json';
+var DISK_SIGNATURE_FILE = 'backupjs.signature';
 var config;
 
 function clearConsole()
@@ -311,6 +312,7 @@ function initDisk(disk)
             eraseIfNotEmpty(disk).
             then(function()
             {
+                markDisk(disk);
                 resolve();
             });
         }
@@ -387,11 +389,11 @@ function eraseDisk(diskRoot)
         console.log('Error erasing disk');
         if (err.code === 'EACCES')
         {
-            console.log('Error: insufficient permissions to erase disk');
+            throw('Error: insufficient permissions to erase disk');
         }
         else
         {
-            console.log(err);
+            throw(err);
         }
     }
 }
@@ -410,9 +412,15 @@ function cleanDir(dirPath)
     }
 }
 
+function markDisk(diskRoot)
+{
+    var mark = 'backup.js - disk cleared on ' + Date();
+    mark += '\nDo not remove this file, it is used by backup.js to verify the disk';
+    fs.writeFileSync(diskRoot + '/' + DISK_SIGNATURE_FILE, mark);
+}
+
 function diskIsValid(disk)
 {
-    var DISK_SIGNATURE_FILE = 'backupjs.signature';
     return fs.existsSync(disk + DISK_SIGNATURE_FILE);
 }
 
@@ -425,6 +433,8 @@ function buildPendingBackupList(source, destination)
     var destinationFileTree = getFileTree(destination);
     var destinationFileList = flattenFileTree(destinationFileTree);
     console.log('Files found in destination folder: ' + destinationFileList.length);
+    var pendingFilesList = getPendingFilesFromLists(sourceFileList, destinationFileList);
+    console.log('New files found: ' + pendingFilesList.length);
 }
 
 function getFileTree(filename)
@@ -460,15 +470,15 @@ function flattenFileTree(tree)
 function getChildren(parent)
 {
     var children = [];
-    if(parent.children)
+    if (parent.children)
     {
-        for(var i = 0; i < parent.children.length; i++)
+        for (var i = 0; i < parent.children.length; i++)
         {
             var child = parent.children[i];
-            if(child.children)
+            if (child.children)
             {
                 var subChildren = getChildren(child);
-                for(var childNr in subChildren)
+                for (var childNr in subChildren)
                 {
                     children.push(subChildren[childNr]);
                 }
@@ -480,6 +490,49 @@ function getChildren(parent)
         }
     }
     return children;
+}
+
+function getPendingFilesFromLists(sourceList, destinationList)
+{
+    var pendingFilesList = [];
+    for (var fileNr in sourceList)
+    {
+        var sourceFile = sourceList[fileNr];
+        var destinationClone = findFileInList(sourceFile, destinationList);
+        if (destinationClone === undefined)
+        {
+            pendingFilesList.push(sourceFile);
+        }
+        else
+        {
+            if (compareFilesByDate(sourceFile, destinationClone) === 1) //source is newer
+            {
+                pendingFilesList.push(sourceFile);
+            }
+        }
+    }
+    return pendingFilesList;
+}
+
+function findFileInList(file, fileList)
+{
+    for (var fileNr in fileList)
+    {
+        var listFile = fileList[fileNr];
+        if (listFile.path === file.path)
+        {
+            return listFile;
+        }
+    }
+}
+
+function compareFilesByDate(fileA, fileB)
+{
+    var dateA = Date.parse(fileA.lastModified);
+    var dateB = Date.parse(fileB.lastModified);
+    if (dateA > dateB) return 1;
+    if (dateA === dateB) return 0;
+    if (dateA < dateB) return -1;
 }
 // MAIN SCRIPT
 (function()
