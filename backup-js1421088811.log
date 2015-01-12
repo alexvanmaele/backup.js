@@ -1,0 +1,8 @@
+{"level":"info","message":"backup.js - Welcome!\n","timestamp":"2015-01-12T18:53:31.609Z"}
+{"level":"info","message":"Config file not found - generating new configuration...","timestamp":"2015-01-12T18:53:31.610Z"}
+{"level":"info","message":"Invalid location","timestamp":"2015-01-12T18:53:44.449Z"}
+{"level":"info","message":"New disk detected","timestamp":"2015-01-12T18:54:04.011Z"}
+{"level":"info","message":"Filtered files by date: 81","timestamp":"2015-01-12T18:54:04.026Z"}
+{"level":"info","message":"No files to backup!","timestamp":"2015-01-12T18:54:04.027Z"}
+{"level":"info","message":"\nbackup.js finished execution - Goodbye!","timestamp":"2015-01-12T18:54:04.028Z"}
+{"level":"info","message":"Total execution time: 32427ms","timestamp":"2015-01-12T18:54:04.029Z"}

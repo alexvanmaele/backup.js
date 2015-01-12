@@ -39,6 +39,7 @@ var path = require('path');
 var argv = require('minimist')(process.argv.slice(2)); //command line arguments
 var winston = require('winston');
 var util = require('util');
+var nodemailer = require('nodemailer');
 // config
 var logger;
 var logMessages = [];
@@ -130,15 +131,13 @@ function clearConsole()
 
 function showWelcome()
 {
-    console.time('Total execution time');
     clearConsole();
     logger.info('backup.js - Welcome!\n');
 }
 
 function showGoodbye()
 {
-    console.log('\nbackup.js finished execution - Goodbye!');
-    console.timeEnd('Total execution time');
+    logger.info('\nbackup.js finished execution - Goodbye!');
 }
 
 function runningAsRoot()
@@ -171,14 +170,14 @@ function tryDropPrivilegesIfRoot()
 {
     if (runningAsRoot())
     {
-        console.log('Root privileges detected.\nTrying to drop to backup user privileges...');
+        logger.info('Root privileges detected.\nTrying to drop to backup user privileges...');
         if (attemptRunAsBackupUser())
         {
-            console.log('Dropped succesfully');
+            logger.info('Dropped succesfully');
         }
         else
         {
-            console.log('Drop failed. Proceeding as root (dangerous)');
+            logger.info('Drop failed. Proceeding as root (dangerous)');
         }
     }
 }
@@ -194,12 +193,12 @@ function generateConfigIfNotExists()
     {
         if (configFileExists())
         {
-            console.log('Config file found');
+            logger.info('Config file found');
             resolve();
         }
         else
         {
-            console.log('Config file not found - generating new configuration...');
+            logger.info('Config file not found - generating new configuration...');
             generateNewConfig().
             then(function()
             {
@@ -207,8 +206,8 @@ function generateConfigIfNotExists()
             }).
             catch (function(err)
             {
-                console.log('Config generation error');
-                console.log(err);
+                logger.info('Config generation error');
+                logger.info(err);
             });
         }
     });
@@ -241,7 +240,7 @@ function promptForConfig()
     {
         if (checkValidLocation(input) === false)
         {
-            console.log('Invalid location');
+            logger.info('Invalid location');
             return false;
         }
         else
@@ -277,10 +276,6 @@ function promptForConfig()
                 {
                     if (input.length < 1) return true; //can be blank
                     else return (isNaN(Date.parse(input)) === false);
-                },
-                before: function(input)
-                {
-                    return new Date(input);
                 },
                 required: false
             },
@@ -395,7 +390,7 @@ function checkValidLocation(dir)
     }
     catch (err)
     {
-        console.log(err);
+        logger.info(err);
         return false;
     }
 }
@@ -408,7 +403,7 @@ function loadConfig()
     }
     catch (err)
     {
-        console.log('Error reading config file');
+        logger.info('Error reading config file');
         throw (err);
     }
 }
@@ -419,7 +414,7 @@ function initDisk(disk)
     {
         if (diskIsValid(disk) === false)
         {
-            console.log('New disk detected');
+            logger.info('New disk detected');
             if (argv['force-erase'] === true)
             {
                 eraseDisk(disk);
@@ -438,7 +433,7 @@ function initDisk(disk)
         }
         else
         {
-            console.log('Valid disk detected');
+            logger.info('Valid disk detected');
             resolve();
         }
     });
@@ -450,7 +445,7 @@ function eraseIfNotEmpty(disk)
     {
         if (extfs.isEmptySync(disk) === false)
         {
-            console.log('WARNING: Disk is not empty! Do you want to erase the disk?');
+            logger.info('WARNING: Disk is not empty! Do you want to erase the disk?');
             promptForConfirm().
             then(function(result)
             {
@@ -460,13 +455,13 @@ function eraseIfNotEmpty(disk)
                 }
                 else
                 {
-                    console.log('Disk has not been erased');
+                    logger.info('Disk has not been erased');
                 }
                 resolve();
             }).
             catch (function(err)
             {
-                console.log(err);
+                logger.info(err);
             });
         }
         else
@@ -507,11 +502,11 @@ function eraseDisk(diskRoot)
     try
     {
         cleanDir(diskRoot);
-        console.log('Disk has been erased');
+        logger.info('Disk has been erased');
     }
     catch (err)
     {
-        console.log('Error erasing disk');
+        logger.info('Error erasing disk');
         if (err.code === 'EACCES')
         {
             throw ('Error: insufficient permissions to erase disk');
@@ -547,7 +542,7 @@ function markDisk(diskRoot)
     }
     catch (err)
     {
-        console.log('Error marking disk');
+        logger.info('Error marking disk');
         if (err.code === 'EACCES')
         {
             throw ('Error: insufficient permissions to mark disk');
@@ -569,20 +564,20 @@ function buildPendingBackupList(source, destination)
     var sourceFileTree = getFileTree(source, config.backupSource);
     // flat tree is easier to manage, but we include the full tree in case we want to visualize later
     var sourceFileList = flattenFileTree(sourceFileTree);
-    //console.log(sourceFileList);
-    //console.log('Files found in source folder: ' + sourceFileList.length);
+    //logger.info(sourceFileList);
+    //logger.info('Files found in source folder: ' + sourceFileList.length);
     var destinationFileTree = getFileTree(destination, config.backupDestination);
     var destinationFileList = flattenFileTree(destinationFileTree);
-    //console.log(destinationFileList);
-    //console.log('Files found in destination folder: ' + destinationFileList.length);
+    //logger.info(destinationFileList);
+    //logger.info('Files found in destination folder: ' + destinationFileList.length);
     var pendingFilesList = getPendingFilesFromLists(sourceFileList, destinationFileList);
-    //console.log('New files found: ' + pendingFilesList.length);
-    //console.log(pendingFilesList);
+    //logger.info('New files found: ' + pendingFilesList.length);
+    //logger.info(pendingFilesList);
     var filteredPendingFilesList = filterListByMinDate(pendingFilesList, config.backupDate);
     if (pendingFilesList.length > 0)
     {
-        console.log('Filtered files by date: ' + (pendingFilesList.length - filteredPendingFilesList.length));
-        //console.log(pendingFilesList);
+        logger.info('Filtered files by date: ' + (pendingFilesList.length - filteredPendingFilesList.length));
+        //logger.info(pendingFilesList);
     }
     return filteredPendingFilesList;
 }
@@ -614,7 +609,7 @@ function getFileTree(filename, root)
 function flattenFileTree(tree)
 {
     var children = getChildren(tree);
-    //console.log(JSON.stringify(children, null, 2));
+    //logger.info(JSON.stringify(children, null, 2));
     return children;
 }
 
@@ -645,12 +640,17 @@ function getChildren(parent)
 
 function filterListByMinDate(fileList, minDate)
 {
+    var minDateParsed = Date.parse(minDate);
+    if(isNaN(minDateParsed)) // no date set
+    {
+        return fileList;
+    }
     var filteredList = [];
     for (var fileNr in fileList)
     {
         var file = fileList[fileNr];
         var fileModDate = Date.parse(file.lastModified);
-        if (fileModDate >= Date.parse(minDate))
+        if (fileModDate >= minDateParsed)
         {
             filteredList.push(file);
         }
@@ -705,19 +705,25 @@ function compareFilesByDate(fileA, fileB)
 
 function printTestModeBackupList(backupList)
 {
-    console.log('Following files are different on source:\n');
-    console.log(backupList);
-    console.log('\nRunning in test mode.\nThis is only a preview: files will not be backed up!');
+    //console.log(backupList);
+    if(backupList.length < 1)
+    {
+        logger.info('There are no files to backup!');
+        return;
+    }
+    logger.info('Following files are different on source:\n');
+    logger.info(JSON.stringify(backupList, null, 2));
+    logger.info('\nRunning in test mode.\nThis is only a preview: files will not be backed up!');
 }
 
 function performBackup(fileList)
 {
     if (fileList.length < 1)
     {
-        console.log('No files to backup!');
+        logger.info('No files to backup!');
         return;
     }
-    console.log('Performing backup...');
+    logger.info('Performing backup...');
     var overwriteCount = 0;
     for (var fileNr in fileList)
     {
@@ -732,12 +738,61 @@ function performBackup(fileList)
         fs.copySync(file.path, backupPath);
         fs.utimesSync(backupPath, stats.atime, stats.mtime); //sync timestamsp
     }
-    console.log('Backup complete!');
-    console.log('Backed up %s %s (Updated: %s)', fileList.length, fileList.length === 1 ? 'file' : 'files', overwriteCount);
+    logger.info('Backup complete!');
+    logger.info('Backed up %s %s (Updated: %s)', fileList.length, fileList.length === 1 ? 'file' : 'files', overwriteCount);
+}
+
+function mailLogSummary()
+{
+    var logSummary = generateLogSummary();
+    var transporter;
+    if (config.logMailSender !== undefined)
+    {
+        transporter = getGmailTransporter(config.logMailSender, config.logMailSenderPassword); //only Gmail for now
+    }
+    else
+    {
+        transporter = nodemailer.createTransport(); //default transport
+    }
+    transporter.sendMail(
+    {
+        from: config.logMailSender || config.logMailReceiver, //use receiver if no sender
+        to: config.logMailReceiver,
+        subject: 'backup.js Log Summary [' +  Math.floor(new Date() / 1000) + ']',
+        text: logSummary
+    });
+}
+
+function generateLogSummary()
+{
+    var summaryString = 'backup.js Log Summary';
+    summaryString += '=====================\n';
+    for(var line = 0; line < logMessages.length; line++)
+    {
+        summaryString += logMessages[line];
+    }
+    summaryString += '\n=====================';
+    summaryString += 'Generated by backup.js - (https://github.com/alexvanmaele/backup.js)\n';
+    summaryString += '=====================';
+}
+
+function getGmailTransporter(user, pass)
+{
+    var transporter = nodemailer.createTransport(
+    {
+        service: 'gmail',
+        auth:
+        {
+            user: user,
+            pass: pass
+        }
+    });
+    return transporter;
 }
 // MAIN SCRIPT
 (function()
 {
+    var startTime = new Date();
     initLogging();
     showWelcome();
     tryDropPrivilegesIfRoot();
@@ -761,7 +816,13 @@ function performBackup(fileList)
     }).
     finally(function()
     {
+        if (config.sendMailSummary === true)
+        {
+            mailLogSummary();
+        }
         showGoodbye();
+        var totalExecutionTime = new Date() - startTime;
+        logger.info('Total execution time: %sms', totalExecutionTime);
     }).
     catch (function(err)
     {
