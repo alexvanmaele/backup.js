@@ -30,7 +30,7 @@ Arguments:
     --reset-config: Remove the existing config in order to generate a new one
 
 Example:
-    node backup.js --backupSource=testFiles --backupDestination=testDisk --backupDate= --testMode=Y --sendMailSummary=N --force-erase
+    node backup.js --backupSource=testFiles --backupDestination=testDisk --backupDate=11/11/2014 --testMode=Y --sendMailSummary=N --force-erase
 
 */
 var userid = require('userid');
@@ -323,10 +323,6 @@ function promptForConfig()
                 pattern: /[YN]/i,
                 message: 'Please enter \'Y\' or \'N\'',
                 required: true,
-                /*before: function(input)
-                {
-                    return input.toUpperCase() === 'Y';
-                }*/
             },
             sendMailSummary:
             {
@@ -335,10 +331,6 @@ function promptForConfig()
                 pattern: /[YN]/i,
                 message: 'Please enter \'Y\' or \'N\'',
                 required: true,
-                /*before: function(input)
-                {
-                    return input.toUpperCase() === 'Y';
-                }*/
             }
         }
     };
@@ -423,13 +415,29 @@ function checkValidLocation(dir)
 {
     try
     {
-        return fs.existsSync(dir);
+        var parsedDir = parseFileSystemDir(dir);
+        return fs.existsSync(parsedDir);
     }
     catch (err)
     {
         logger.info(err);
         return false;
     }
+}
+
+function parseFileSystemDir(dir)
+{
+    var splitPath = path.normalize(dir).split(path.sep);
+    if (splitPath[0] == '~') splitPath[0] = process.env.HOME || process.env.USERPROFILE;
+    for (var i = 0; i < splitPath.length; i++)
+    {
+        if (splitPath[i][0] == '$')
+        {
+            var envVariable = splitPath[i].substr(1);
+            if (process.env[envVariable]) splitPath[i] = process.env[envVariable];
+        }
+    }
+    return path.join.apply(path, splitPath);
 }
 
 function loadConfig()
@@ -598,10 +606,10 @@ function diskIsValid(disk)
 
 function buildPendingBackupList(source, destination)
 {
-    var sourceFileTree = getFileTree(source, config.backupSource);
+    var sourceFileTree = getFileTree(source, parseFileSystemDir(config.backupSource));
     // flat tree is easier to manage, but we include the full tree in case we want to visualize later
     var sourceFileList = flattenFileTree(sourceFileTree);
-    var destinationFileTree = getFileTree(destination, config.backupDestination);
+    var destinationFileTree = getFileTree(destination, parseFileSystemDir(config.backupDestination));
     var destinationFileList = flattenFileTree(destinationFileTree);
     var pendingFilesList = getPendingFilesFromLists(sourceFileList, destinationFileList);
     logger.info('New files found: ' + pendingFilesList.length);
@@ -696,6 +704,10 @@ function filterListByMinDate(fileList, minDate)
 
 function filterByRegex(fileList, regex)
 {
+    if (regex === undefined || regex.length < 1)
+    {
+        return fileList;
+    }
     var filter = new RegExp(regex, 'g');
     var filteredList = [];
     for (var fileNr in fileList)
@@ -779,14 +791,14 @@ function performBackup(fileList)
     {
         var file = fileList[fileNr];
         var stats = fs.statSync(file.path);
-        var backupPath = config.backupDestination + '/' + file.relativePath;
+        var backupPath = parseFileSystemDir(config.backupDestination) + '/' + file.relativePath;
         if (fs.existsSync(backupPath))
         {
             fs.unlinkSync(backupPath); //delete
             overwriteCount++;
         }
         fs.copySync(file.path, backupPath);
-        fs.utimesSync(backupPath, stats.atime, stats.mtime); //sync timestamsp
+        fs.utimesSync(backupPath, stats.atime, stats.mtime); //sync timestamps
     }
     logger.info('Backup complete!');
     logger.info('Backed up %s %s (Updated: %s)', fileList.length, fileList.length === 1 ? 'file' : 'files', overwriteCount);
@@ -867,11 +879,11 @@ function getGmailTransporter(user, pass)
     then(function()
     {
         loadConfig();
-        return initDisk(config.backupDestination);
+        return initDisk(parseFileSystemDir(config.backupDestination));
     }).
     then(function()
     {
-        var pendingBackupList = buildPendingBackupList(config.backupSource, config.backupDestination);
+        var pendingBackupList = buildPendingBackupList(parseFileSystemDir(config.backupSource), parseFileSystemDir(config.backupDestination));
         if (config.testMode.toUpperCase() === 'Y')
         {
             printTestModeBackupList(pendingBackupList);
