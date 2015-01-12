@@ -36,15 +36,92 @@ var fs = promise.promisifyAll(require("fs-extra"));
 var prompt = promise.promisifyAll(require('prompt'));
 var extfs = require('extfs');
 var path = require('path');
-var argv = require('minimist')(process.argv.slice(2));
+var argv = require('minimist')(process.argv.slice(2)); //command line arguments
+var winston = require('winston');
+var util = require('util');
 // config
+var logger;
+var logMessages = [];
 var CONFIG_FILE = './config.json';
+var LOG_PREFIX = 'backup-js';
 var DISK_SIGNATURE_FILE = 'backupjs.signature';
 var backupReasons = {
     DEST_FILE_NOT_FOUND: 'Destination file not found',
     SRC_FILE_NEWER: 'Source file is newer than destination file'
 };
 var config;
+
+function initLogging()
+{
+    initMainLogger();
+    initFileLogger();
+    initCustomLogger();
+}
+
+function initMainLogger()
+{
+    logger = new(winston.Logger)(
+    {});
+    var consoleLogger = winston.transports.consoleLogger = function(options)
+    {
+        this.name = 'consoleLogger';
+        this.level = 'info';
+    };
+    util.inherits(consoleLogger, winston.Transport);
+    consoleLogger.prototype.log = function(level, msg, meta, callback)
+    {
+        console.log(msg);
+        callback(null, true);
+    };
+    logger.add(consoleLogger);
+}
+
+function initFileLogger()
+{
+    var timestamp = Math.floor(new Date() / 1000);
+    var logFileName = LOG_PREFIX + timestamp + '.log';
+    if (logFileIsWriteable(logFileName))
+    {
+        logger.add(winston.transports.File,
+        {
+            filename: logFileName
+        });
+    }
+}
+
+function initCustomLogger()
+{
+    var customLogger = winston.transports.customerLogger = function(options)
+    {
+        this.name = 'customLogger';
+        this.level = 'info';
+    };
+    util.inherits(customLogger, winston.Transport);
+    customLogger.prototype.log = function(level, msg, meta, callback)
+    {
+        var timestamp = '[' + new Date().toLocaleTimeString() + ']';
+        var logItem = timestamp + ' ' + level + ' : ' + msg;
+        logMessages.push(logItem);
+        callback(null, true);
+    };
+    logger.add(customLogger);
+}
+
+function logFileIsWriteable(logFile)
+{
+    try
+    {
+        if (fs.existsSync(logFile)) throw 'Error: Log file with same name already exists';
+        fs.writeFileSync(logFile, 'log test data');
+        fs.unlinkSync(logFile);
+        return true;
+    }
+    catch (err)
+    {
+        logger.error('Error handling log file: ' + err);
+        return false;
+    }
+}
 
 function clearConsole()
 {
@@ -55,7 +132,7 @@ function showWelcome()
 {
     console.time('Total execution time');
     clearConsole();
-    console.log('backup.js - Welcome!\n');
+    logger.info('backup.js - Welcome!\n');
 }
 
 function showGoodbye()
@@ -661,8 +738,8 @@ function performBackup(fileList)
 // MAIN SCRIPT
 (function()
 {
+    initLogging();
     showWelcome();
-    //console.log(argv);
     tryDropPrivilegesIfRoot();
     generateConfigIfNotExists().
     then(function()
@@ -688,7 +765,7 @@ function performBackup(fileList)
     }).
     catch (function(err)
     {
-        console.log('An unexpected error occurred');
-        console.log(err);
+        logger.error('An unexpected error occurred');
+        logger.error(err);
     });
 }());
