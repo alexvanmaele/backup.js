@@ -10,10 +10,9 @@ Features:
 - Sends backup summary to you (configurable email address)
 */
 var userid = require('userid');
-var prompt = require('prompt');
 var promise = require('bluebird');
-//var fs = promise.promisifyAll(require("fs"));
-var fs = require('fs');
+var fs = promise.promisifyAll(require("fs"));
+var prompt = promise.promisifyAll(require('prompt'));
 var CONFIG_FILE = './config.json';
 
 function clearConsole()
@@ -97,6 +96,11 @@ function generateConfigIfNotExists()
             then(function()
             {
                 resolve();
+            }).
+            catch (function(err)
+            {
+                console.log('Config generation error');
+                console.log(err);
             });
         }
     });
@@ -107,58 +111,94 @@ function generateNewConfig()
     return promptForConfig().
     then(function(result)
     {
-        fs.writeFileSync(CONFIG_FILE, result);
+        var prettyJson = JSON.stringify(result, null, 2);
+        fs.writeFileSync(CONFIG_FILE, prettyJson);
     }).
-    catch(function(err)
+    catch (function(err)
     {
-        console.log('Config generation error');
+        if (err.code === 'EACCES')
+        {
+            throw ('Error: permission denied while writing config. Do you have enough rights? (' + process.getuid() + ')');
+        }
+        else
+        {
+            throw (err);
+        }
     });
 }
 
 function promptForConfig()
 {
-    return new promise(function(resolve, reject)
-    {
-        var schema = {
-            properties:
+    prompt.message = '';
+    prompt.delimiter = '';
+    prompt.colors = false;
+    //prompt.start();
+    var backupConfig = {
+        properties:
+        {
+            backupSource:
             {
-                backupSource:
+                description: 'Enter the backup source location:',
+                required: true
+            },
+            backupDestination:
+            {
+                description: 'Enter the backup destination drive:',
+                required: true
+            },
+            backupDate:
+            {
+                description: 'Enter the max. file date (leave blank to include all):',
+                pattern: /^(?:(?:31(\/|-|\.)(?:0?[13578]|1[02]))\1|(?:(?:29|30)(\/|-|\.)(?:0?[1,3-9]|1[0-2])\2))(?:(?:1[6-9]|[2-9]\d)?\d{2})$|^(?:29(\/|-|\.)0?2\3(?:(?:(?:1[6-9]|[2-9]\d)?(?:0[48]|[2468][048]|[13579][26])|(?:(?:16|[2468][048]|[3579][26])00))))$|^(?:0?[1-9]|1\d|2[0-8])(\/|-|\.)(?:(?:0?[1-9])|(?:1[0-2]))\4(?:(?:1[6-9]|[2-9]\d)?\d{2})$/,
+                message: 'Please enter a valid date in DD/MM/YYYY format',
+                required: false
+            },
+            sendMailSummary:
+            {
+                description: 'Do you want to receive a mail log summary? [Y/n]',
+                default: 'Y',
+                pattern: /[YN]/i,
+                message: 'Please enter \'Y\' or \'N\'',
+                required: true,
+                before: function(input)
                 {
-                    description: 'Enter the backup source location',
-                    required: true
-                },
-                backupDestination:
-                {
-                    description: 'Enter the backup destination drive',
-                    required: true
-                },
-                backupDate:
-                {
-                    description: 'Enter the max. date of the files that will be backed up (leave blank to include all files)',
-                    pattern: /^(?:(?:31(\/|-|\.)(?:0?[13578]|1[02]))\1|(?:(?:29|30)(\/|-|\.)(?:0?[1,3-9]|1[0-2])\2))(?:(?:1[6-9]|[2-9]\d)?\d{2})$|^(?:29(\/|-|\.)0?2\3(?:(?:(?:1[6-9]|[2-9]\d)?(?:0[48]|[2468][048]|[13579][26])|(?:(?:16|[2468][048]|[3579][26])00))))$|^(?:0?[1-9]|1\d|2[0-8])(\/|-|\.)(?:(?:0?[1-9])|(?:1[0-2]))\4(?:(?:1[6-9]|[2-9]\d)?\d{2})$/,
-                    message: 'Please enter a valid date in DD/MM/YYYY format',
-                    required: false
-                },
-                logMailReceiver:
-                {
-                    description: 'Enter your email address to receive a log summary (leave blank to disable)',
-                    required: false
-                },
-                logMailSender:
-                {
-                    description: 'Enter an email address to send the logs from (Gmail only, leave blank for system default)',
-                    required: false
-                },
-                logMailSenderPassword:
-                {
-                    description: 'Enter the password for the email address (Gmail, leave blank if none)',
-                    required: false
+                    return  input.toLowerCase();
                 }
             }
-        };
-        prompt.message = '';
-        prompt.delimiter = '';
-        prompt.start();
+
+        }
+    };
+    var emailConfig = {
+        logMailReceiver:
+            {
+                description: 'Enter a mail address to receive a log summary:',
+                required: true
+            },
+        logMailSender:
+            {
+                description: 'Enter a mail address used to send logs (Gmail only, leave blank for system default):',
+                required: false
+            },
+            logMailSenderPassword:
+            {
+                description: 'Enter the password for this mail address (Gmail, leave blank if none):',
+                required: false
+            }
+    };
+    return promptFor(backupConfig).
+    then(function(result)
+    {
+        if(result.sendMailSummary === true)
+        {
+            promptFor(emailConfig);
+        }
+    });
+}
+
+function promptFor(schema)
+{
+    return new promise(function(resolve, reject)
+    {
         prompt.get(schema, function(err, result)
         {
             if (err)
