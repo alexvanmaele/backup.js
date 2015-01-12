@@ -1,1 +1,5 @@
+# Skip config, this gets generated
 config.json
+
+# Skip log files
+backup-js*.log
