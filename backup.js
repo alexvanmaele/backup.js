@@ -198,8 +198,12 @@ function promptForConfig()
                 description: 'Enter the max. file date (leave blank to include all):',
                 conform: function(input)
                 {
-                    if(input.length < 1) return true; //can be blank
+                    if (input.length < 1) return true; //can be blank
                     else return (isNaN(Date.parse(input)) === false);
+                },
+                before: function(input)
+                {
+                    return new Date(input);
                 },
                 required: false
             },
@@ -497,7 +501,13 @@ function buildPendingBackupList(source, destination)
     var pendingFilesList = getPendingFilesFromLists(sourceFileList, destinationFileList);
     //console.log('New files found: ' + pendingFilesList.length);
     //console.log(pendingFilesList);
-    return pendingFilesList;
+    var filteredPendingFilesList = filterListByMinDate(pendingFilesList, config.backupDate);
+    if (pendingFilesList.length > 0)
+    {
+        console.log('Filtered files by date: ' + (pendingFilesList.length - filteredPendingFilesList.length));
+        //console.log(pendingFilesList);
+    }
+    return filteredPendingFilesList;
 }
 
 function getFileTree(filename, root)
@@ -554,6 +564,21 @@ function getChildren(parent)
         }
     }
     return children;
+}
+
+function filterListByMinDate(fileList, minDate)
+{
+    var filteredList = [];
+    for (var fileNr in fileList)
+    {
+        var file = fileList[fileNr];
+        var fileModDate = Date.parse(file.lastModified);
+        if (fileModDate >= Date.parse(minDate))
+        {
+            filteredList.push(file);
+        }
+    }
+    return filteredList;
 }
 
 function getPendingFilesFromLists(sourceList, destinationList)

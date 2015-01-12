@@ -1,0 +1,7 @@
+{
+  "backupSource": "testFiles",
+  "backupDestination": "testDisk",
+  "backupDate": "11/11/2014",
+  "testMode": "Y",
+  "sendMailSummary": "N"
+}
