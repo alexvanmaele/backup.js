@@ -419,17 +419,22 @@ function diskIsValid(disk)
 function buildPendingBackupList(source, destination)
 {
     var sourceFileTree = getFileTree(source);
-    console.log(JSON.stringify(sourceFileTree, null, 2));
+    // flat tree is easier to manage, but we include the full tree in case we want to visualize later
+    var sourceFileList = flattenFileTree(sourceFileTree);
+    console.log('Files found in source folder: ' + sourceFileList.length);
+    var destinationFileTree = getFileTree(destination);
+    var destinationFileList = flattenFileTree(destinationFileTree);
+    console.log('Files found in destination folder: ' + destinationFileList.length);
 }
 
 function getFileTree(filename)
 {
     var stats = fs.lstatSync(filename);
     var info = {
-            path: filename,
-            name: path.basename(filename),
-            lastModified: stats.mtime
-        };
+        path: filename,
+        name: path.basename(filename),
+        lastModified: stats.mtime
+    };
     if (stats.isDirectory())
     {
         info.type = "folder";
@@ -443,6 +448,38 @@ function getFileTree(filename)
         info.type = "file";
     }
     return info;
+}
+
+function flattenFileTree(tree)
+{
+    var children = getChildren(tree);
+    //console.log(JSON.stringify(children, null, 2));
+    return children;
+}
+
+function getChildren(parent)
+{
+    var children = [];
+    if(parent.children)
+    {
+        for(var i = 0; i < parent.children.length; i++)
+        {
+            var child = parent.children[i];
+            if(child.children)
+            {
+                var subChildren = getChildren(child);
+                for(var childNr in subChildren)
+                {
+                    children.push(subChildren[childNr]);
+                }
+            }
+            else
+            {
+                children.push(child);
+            }
+        }
+    }
+    return children;
 }
 // MAIN SCRIPT
 (function()

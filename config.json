@@ -1,5 +1,5 @@
 {
-  "backupSource": "files",
+  "backupSource": "testFiles",
   "backupDestination": "testDisk",
   "backupDate": "",
   "testMode": true,
