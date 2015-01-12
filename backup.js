@@ -14,6 +14,7 @@ var promise = require('bluebird');
 var fs = promise.promisifyAll(require("fs"));
 var prompt = promise.promisifyAll(require('prompt'));
 var extfs = require('extfs');
+var path = require('path');
 // config
 var CONFIG_FILE = './config.json';
 var config;
@@ -171,6 +172,18 @@ function promptForConfig()
                 pattern: /^(?:(?:31(\/|-|\.)(?:0?[13578]|1[02]))\1|(?:(?:29|30)(\/|-|\.)(?:0?[1,3-9]|1[0-2])\2))(?:(?:1[6-9]|[2-9]\d)?\d{2})$|^(?:29(\/|-|\.)0?2\3(?:(?:(?:1[6-9]|[2-9]\d)?(?:0[48]|[2468][048]|[13579][26])|(?:(?:16|[2468][048]|[3579][26])00))))$|^(?:0?[1-9]|1\d|2[0-8])(\/|-|\.)(?:(?:0?[1-9])|(?:1[0-2]))\4(?:(?:1[6-9]|[2-9]\d)?\d{2})$/,
                 message: 'Please enter a valid date in DD/MM/YYYY format',
                 required: false
+            },
+            testMode:
+            {
+                description: 'Do you want to run in test mode? Backup will be calculated but not performed [y/N]',
+                default: 'N',
+                pattern: /[YN]/i,
+                message: 'Please enter \'Y\' or \'N\'',
+                required: true,
+                before: function(input)
+                {
+                    return input.toUpperCase() == 'Y';
+                }
             },
             sendMailSummary:
             {
@@ -387,19 +400,49 @@ function cleanDir(dirPath)
 {
     var files = fs.readdirSync(dirPath);
     if (files.length > 0)
+    {
         for (var i = 0; i < files.length; i++)
         {
             var filePath = dirPath + '/' + files[i];
             if (fs.statSync(filePath).isFile()) fs.unlinkSync(filePath);
             else cleanDir(filePath);
         }
-    //fs.rmdirSync(dirPath);
+    }
 }
 
 function diskIsValid(disk)
 {
     var DISK_SIGNATURE_FILE = 'backupjs.signature';
     return fs.existsSync(disk + DISK_SIGNATURE_FILE);
+}
+
+function buildPendingBackupList(source, destination)
+{
+    var sourceFileTree = getFileTree(source);
+    console.log(JSON.stringify(sourceFileTree, null, 2));
+}
+
+function getFileTree(filename)
+{
+    var stats = fs.lstatSync(filename);
+    var info = {
+            path: filename,
+            name: path.basename(filename),
+            lastModified: stats.mtime
+        };
+    if (stats.isDirectory())
+    {
+        info.type = "folder";
+        info.children = fs.readdirSync(filename).map(function(child)
+        {
+            return getFileTree(filename + '/' + child);
+        });
+    }
+    else
+    {
+        info.type = "file";
+    }
+    return info;
 }
 // MAIN SCRIPT
 (function()
@@ -411,9 +454,22 @@ function diskIsValid(disk)
     {
         loadConfig();
         return initDisk(config.backupDestination);
-        //todo
     }).
     then(function()
+    {
+        var pendingBackupList = buildPendingBackupList(config.backupSource, config.backupDestination);
+        if (config.testMode === true)
+        {
+            //printBackupListStats(pendingBackupList);
+            //todo: possible return promise here
+        }
+        else
+        {
+            //performBackup(pendingBackupList);
+            //todo: possible return promise here
+        }
+    }).
+    finally(function()
     {
         showGoodbye();
     }).
