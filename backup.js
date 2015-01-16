@@ -145,7 +145,8 @@ function showGoodbye()
 
 function runningAsRoot()
 {
-    return process.getuid() === userid.uid('root');
+    //return process.getuid() === userid.uid('root');
+    return process.getuid() === 0;
 }
 
 function attemptRunAsBackupUser()
